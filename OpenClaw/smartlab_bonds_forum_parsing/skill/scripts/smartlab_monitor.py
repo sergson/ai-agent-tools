@@ -9,7 +9,8 @@ def get_html():
     return res.stdout
 
 def parse_posts(html):
-    pattern = r'<li class="bluid_[0-9]*">([0-9]{2}:[0-9]{2})<i><a href="/bonds/[^"]*">([^<]*)</a></i><a href="[^"]*#comment([0-9]+)"[^>]*>([^<]*)</a></li>'
+    # More tolerant pattern: allow 1-2 digits for hour, optional whitespace between tags
+    pattern = r'<li class="bluid_[0-9]*">\s*([0-9]{1,2}:[0-9]{2})\s*<i>\s*<a href="/bonds/[^"]*">([^<]*)</a>\s*</i>\s*<a href="[^"]*#comment([0-9]+)"[^>]*>([^<]*)</a>\s*</li>'
     posts = []
     for m in re.finditer(pattern, html):
         time_str = m.group(1)
@@ -46,21 +47,39 @@ def save_state(path, shown):
 
 def main():
     state_file = os.path.expanduser('~/.openclaw/workspace/smartlab_state.json')
+    archive_dir = '/media/temp/smartlab_bonds_forum'
+    # Ensure archive directory exists
+    try:
+        os.makedirs(archive_dir, exist_ok=True)
+    except Exception:
+        pass
     html = get_html()
     posts = parse_posts(html)
     # Получаем текущее время в MSK
     cur_time = subprocess.run(['bash', '-c', "TZ=Europe/Moscow date +%H:%M"], capture_output=True, text=True).stdout.strip()
+    cur_date = subprocess.run(['bash', '-c', "TZ=Europe/Moscow date '+%Y-%m-%d'"], capture_output=True, text=True).stdout.strip()
     recent_posts = [p for p in posts if within_last_2_hours(p['time'], cur_time)]
     shown = load_state(state_file)
     new_posts = [p for p in recent_posts if p['id'] not in shown]
     if not new_posts:
         print("Новых сообщений за последние 2 часа нет.")
     else:
+        # Determine daily archive file
+        daily_filename = cur_date.replace('-', '') + '.txt'
+        archive_file = os.path.join(archive_dir, daily_filename)
         for p in new_posts:
             txt = p['text']
             if len(txt) > 100:
                 txt = txt[:100] + '...'
-            print(f"[{p['time']}] {p['issuer']}: {txt}")
+            line = f"[{p['time']}] {p['issuer']}: {txt}"
+            print(line)
+            # Append to daily archive with date
+            try:
+                with open(archive_file, 'a', encoding='utf-8') as f:
+                    f.write(f"[{cur_date} {p['time']}] {p['issuer']}: {txt}\n")
+            except Exception:
+                # If archive cannot be written, continue without failing
+                pass
     shown.update(p['id'] for p in new_posts)
     save_state(state_file, shown)
 
