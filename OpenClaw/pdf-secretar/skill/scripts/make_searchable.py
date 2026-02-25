@@ -25,7 +25,9 @@ def get_venv_python():
         sys.exit(1)
     return str(venv_python)
 
-def make_searchable(input_pdf, output_pdf, lang='rus+eng', extra_args=None, **kwargs):
+def make_searchable(input_pdf, output_pdf, lang='rus+eng',
+                    deskew=False, clean=False, optimize=None, output_type=None,
+                    image_dpi=None, tesseract_thresholding=None, rotate_pages=False):
     """
     Run ocrmypdf to create searchable PDF using workspace venv python.
     """
@@ -40,19 +42,20 @@ def make_searchable(input_pdf, output_pdf, lang='rus+eng', extra_args=None, **kw
 
     args = [venv_python, '-m', 'ocrmypdf', input_pdf, output_pdf, '--language', lang]
 
-    # Add standard flags
-    if kwargs.get('deskew'):
+    if deskew:
         args.append('--deskew')
-    if kwargs.get('clean'):
+    if clean:
         args.append('--clean')
-    if kwargs.get('optimize'):
-        args.extend(['--optimize', str(kwargs['optimize'])])
-    if kwargs.get('output_type'):
-        args.extend(['--output-type', kwargs['output_type']])
-
-    # Append any extra arguments passed through
-    if extra_args:
-        args.extend(extra_args)
+    if optimize is not None:
+        args.extend(['--optimize', str(optimize)])
+    if output_type:
+        args.extend(['--output-type', output_type])
+    if image_dpi:
+        args.extend(['--image-dpi', str(image_dpi)])
+    if tesseract_thresholding:
+        args.extend(['--tesseract-thresholding', tesseract_thresholding])
+    if rotate_pages:
+        args.append('--rotate-pages')
 
     print(f"Running: {' '.join(args)}")
     try:
@@ -65,25 +68,48 @@ def make_searchable(input_pdf, output_pdf, lang='rus+eng', extra_args=None, **kw
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Create searchable PDF from scanned document using OCR",
-        epilog="Extra arguments (after '--') are passed directly to ocrmypdf. See: ocrmypdf --help"
+        epilog="Use --preset to apply predefined settings for difficult images."
     )
     parser.add_argument("input_pdf", help="Input scanned PDF or image-based PDF")
     parser.add_argument("--output", "-o", default="searchable.pdf", help="Output PDF file")
     parser.add_argument("--lang", default="rus+eng", help="OCR languages (e.g., 'eng+rus', 'rus')")
     parser.add_argument("--deskew", action='store_true', help="Deskew pages before OCR")
-    parser.add_argument("--clean", action='store_true', help="Clean pages before OCR")
+    parser.add_argument("--clean", action='store_true', help="Clean pages before OCR (requires unpaper)")
     parser.add_argument("--optimize", type=int, help="PDF optimization level (0-3)")
     parser.add_argument("--output-type", choices=['pdf', 'pdfa', 'pdfa-1', 'pdfa-2', 'pdfa-3'], help="Output PDF type")
-    # Parse known args and extra
-    args, extra = parser.parse_known_args()
+    parser.add_argument("--image-dpi", type=int, help="DPI for input images (if input is image)")
+    parser.add_argument("--tesseract-thresholding", choices=['auto', 'otsu', 'adaptive-otsu', 'sauvola'],
+                        help="Thresholding method for Tesseract")
+    parser.add_argument("--rotate-pages", action='store_true', help="Auto-rotate pages")
+    parser.add_argument("--preset", choices=['default', 'dark'], default='default',
+                        help="Preset configuration: 'dark' for low-quality, noisy, or dark scans")
+    args = parser.parse_args()
+
+    # Apply preset overrides
+    deskew = args.deskew
+    clean = args.clean
+    optimize = args.optimize
+    output_type = args.output_type
+    image_dpi = args.image_dpi
+    tesseract_thresholding = args.tesseract_thresholding
+    rotate_pages = args.rotate_pages
+
+    if args.preset == 'dark':
+        deskew = True
+        image_dpi = 300
+        tesseract_thresholding = 'adaptive-otsu'
+        rotate_pages = True
+        # clean remains as user-specified (requires unpaper)
 
     make_searchable(
         args.input_pdf,
         args.output,
         lang=args.lang,
-        deskew=args.deskew,
-        clean=args.clean,
-        optimize=args.optimize,
-        output_type=args.output_type,
-        extra_args=extra if extra else None
+        deskew=deskew,
+        clean=clean,
+        optimize=optimize,
+        output_type=output_type,
+        image_dpi=image_dpi,
+        tesseract_thresholding=tesseract_thresholding,
+        rotate_pages=rotate_pages
     )
