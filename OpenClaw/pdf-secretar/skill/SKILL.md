@@ -78,6 +78,15 @@ python3 scripts/extract_metadata.py input.pdf --output meta.json
 python3 scripts/make_searchable.py scanned.pdf --output searchable.pdf --lang rus+eng --deskew --clean
 ```
 
+### Intelligent merge (content-based ordering)
+```bash
+python3 scripts/smart_merge.py "docs/*.pdf" --output merged.pdf
+# First run: asks OpenRouter model for order (requires OPENROUTER_API_KEY). After confirmation saves template.
+# Use explicit order: --order "договор,техническое_задание,календарный_план,смета,акт,заявление"
+# Skip confirmation: --no-confirm
+# Disable patterns: --use-patterns false
+```
+
 ## What This Skill Does
 
 | Function | Script | Description |
@@ -95,6 +104,7 @@ python3 scripts/make_searchable.py scanned.pdf --output searchable.pdf --lang ru
 | Поворот | `rotate_pages.py` | Поворачивает страницы на 90/180/270 градусов |
 | Метаданные | `extract_metadata.py` | Извлекает метаданные PDF (title, author, dates, etc.) |
 | Поисковый PDF (Searchable) | `make_searchable.py` | Добавляет текстовый слой OCR к сканированному PDF (требует ghostscript, tesseract, poppler) |
+| Интеллектуальное объединение | `smart_merge.py` | Объединяет PDF в логическом порядке на основе сигнатур содержимого, с обучением шаблонов и подтверждением. Может использовать OpenRouter для определения порядка при первом запуске. |
 
 ## Requirements
 
