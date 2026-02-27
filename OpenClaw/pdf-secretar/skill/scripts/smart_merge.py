@@ -25,9 +25,10 @@ def ensure_dependencies():
         return False
 
 # Constants
-PATTERN_DB_PATH = Path.home() / ".openclaw" / "workspace" / "smart_merge_patterns.json"
+DEFAULT_PATTERN_DB = Path("/media/temp/.smart_merge/patterns.json")
 MIN_SIMILARITY_DEFAULT = 0.6
 OPENROUTER_MODEL = "arcee-ai/trinity-large-preview:free"
+ALLOWED_BASE_DIR = Path("/media/temp").resolve()
 
 # Stopwords (partial)
 STOPWORDS = {
@@ -39,6 +40,14 @@ STOPWORDS = {
     "другой", "хоть", "после", "над", "больше", "тот", "через", "эти", "нас", "про", "всего", "них", "какая", "много", "разве", "три", "эту", "моя", "впрочем", "хорошо", "свою",
     "этой", "перед", "иногда", "лучше", "чуть", "том", "нельзя", "такой", "им", "более", "всегда", "конечно", "всю", "между"
 }
+
+def is_allowed_path(path: Path) -> bool:
+    """Проверяет, что путь находится внутри /media/temp."""
+    try:
+        resolved = path.resolve()
+        return resolved.is_relative_to(ALLOWED_BASE_DIR)
+    except Exception:
+        return False
 
 def extract_first_words(pdf_path: str, num_words: int = 300) -> str:
     from PyPDF2 import PdfReader
@@ -60,13 +69,11 @@ def clean_text(text: str) -> List[str]:
     Оставляет только значимые слова и цифровые последовательности после маркеров номеров.
     Токены: буквы+цифры. Дубликаты сохраняются. Порядок сохраняется.
     """
-    # Регулярное выражение для слов (буквы и цифры)
     pattern = re.compile(r'\b[а-яА-ЯёЁa-zA-Z0-9]+\b')
     matches = list(pattern.finditer(text))
     if not matches:
         return []
 
-    # Определяем начала предложений/заголовков
     sentence_starts: Set[int] = {0}
     for m in re.finditer(r'(?<=[.!?])\s+([А-ЯA-Z])', text):
         sentence_starts.add(m.start(1))
@@ -85,30 +92,24 @@ def clean_text(text: str) -> List[str]:
     )
 
     def has_number_marker(pos: int) -> bool:
-        # Проверяем 30 символов перед позицией
         context_start = max(0, pos - 30)
         context = text[context_start:pos]
-        # Маркеры: №, #, номер, номера, номером (только эти слова, затем пробелы и конец контекста)
         marker_re = re.compile(r'(№|#|номер(?:а|ом)?)\s*$')
         return bool(marker_re.search(context))
 
     for m in matches:
         word = m.group()
         start = m.start()
-        # Если токен состоит только из цифр
         if word.isdigit():
             if has_number_marker(start):
                 cleaned.append(word)
             continue
-        # Обычная обработка для токенов с буквами (возможно, с цифрами)
         if len(word) <= 3:
             continue
         tok_lower = word.lower()
         if tok_lower in STOPWORDS:
             continue
         is_first = start in sentence_starts
-        # Фильтруем имена собственные только для токенов БЕЗ цифр
-        # Если токен содержит хотя бы одну цифру, фильтр имён не применяем
         has_digit = any(c.isdigit() for c in word)
         if not has_digit and not is_first and word[0].isupper() and any(tok_lower.endswith(suf) for suf in name_suffixes) and not word.isupper():
             continue
@@ -141,8 +142,8 @@ def load_patterns(db_path: Path) -> List[Dict[str, Any]]:
 
 def save_patterns(db_path: Path, patterns: List[Dict[str, Any]]):
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(db_path, 'w', encoding='utf-8') as f:
-        json.dump(patterns, f, ensure_ascii=False, indent=2)
+    with open(db_path, 'w', encoding='utf-8') as fout:
+        json.dump(patterns, fout, ensure_ascii=False, indent=2)
 
 def find_matching_pattern(signatures: List[List[str]], patterns: List[Dict[str, Any]], min_similarity: float) -> Optional[List[int]]:
     n = len(signatures)
@@ -225,7 +226,6 @@ def build_prompt(docs_info: List[Tuple[str, List[str]]]) -> str:
         "Documents (signatures are ordered by first occurrence, duplicates kept):"
     ]
     for idx, (name, sig) in enumerate(docs_info):
-        # Show up to 50 words to give more context
         sig_str = ", ".join(sig[:50])
         prompt_lines.append(f"{idx}: {Path(name).name} (signature: [{sig_str}])")
     return "\n".join(prompt_lines)
@@ -254,11 +254,11 @@ def main():
         sys.exit(1)
     parser = argparse.ArgumentParser(description="Интеллектуальное объединение PDF по смыслу (сигнатуры + шаблоны)")
     parser.add_argument("--files", "-f", required=True, help="Маска файлов, например: '/media/temp/*.pdf'")
-    parser.add_argument("--output", default="smart_merged.pdf", help="Выходной файл")
+    parser.add_argument("--output", help="Выходной файл (если не указан, будет создан на основе первого документа, например: doc_merged.pdf)")
     parser.add_argument("--use-patterns", action=argparse.BooleanOptionalAction, default=True,
                         help="Использовать базу шаблонов (по умолчанию True). Отключить: --no-use-patterns")
-    parser.add_argument("--pattern-db", default=str(PATTERN_DB_PATH),
-                        help="Путь к файлу базы шаблонов (JSON)")
+    parser.add_argument("--pattern-db", default=str(DEFAULT_PATTERN_DB),
+                        help=f"Путь к файлу базы шаблонов (JSON). По умолчанию: {DEFAULT_PATTERN_DB}")
     parser.add_argument("--min-similarity", type=float, default=MIN_SIMILARITY_DEFAULT,
                         help="Порог сходства для поиска шаблона (0-1)")
     parser.add_argument("--no-confirm", action="store_true",
@@ -274,6 +274,35 @@ def main():
     if not files:
         print(f"ERROR: нет файлов по маске: {args.files}", file=sys.stderr)
         sys.exit(1)
+
+    # Валидация путей: все файлы должны быть внутри /media/temp
+    for fp in files:
+        if not is_allowed_path(Path(fp)):
+            print(f"ERROR: Path not allowed (outside /media/temp): {fp}", file=sys.stderr)
+            sys.exit(1)
+
+    # Определяем выходной путь
+    if args.output:
+        output_path = Path(args.output)
+    else:
+        # Берём первый файл в порядке (пока未知 порядок, но возьмём первый из отсортированного списка, если шаблон/модель не сработали)
+        # После определения порядка можно переименовать, но для простоты возьмём первый файл из отсортированного списка имён
+        first_file = Path(files[0])
+        output_path = first_file.parent / f"{first_file.stem}_merged.pdf"
+    # Проверка выходного пути
+    if not is_allowed_path(output_path):
+        print(f"ERROR: Output path not allowed (outside /media/temp): {output_path}", file=sys.stderr)
+        sys.exit(1)
+
+    # Проверка существования файлов и расширения .pdf
+    for fp in files:
+        p = Path(fp)
+        if not p.is_file():
+            print(f"ERROR: File not found or not a regular file: {fp}", file=sys.stderr)
+            sys.exit(1)
+        if p.suffix.lower() != ".pdf":
+            print(f"ERROR: Not a PDF file: {fp}", file=sys.stderr)
+            sys.exit(1)
 
     print(f"Файлов: {len(files)}")
     signatures: List[List[str]] = []
@@ -306,6 +335,16 @@ def main():
         print(f"ERROR: модель вернула некорректный порядок: {order}", file=sys.stderr)
         sys.exit(1)
 
+    # Если output не был задан, теперь формируем на основе первого документа в порядке
+    if not args.output:
+        first_idx = order[0]
+        first_file = Path(files[first_idx])
+        output_path = first_file.parent / f"{first_file.stem}_merged.pdf"
+        # Повторно проверим allowed (должно быть true, так как тот же каталог)
+        if not is_allowed_path(output_path):
+            print(f"ERROR: Generated output path not allowed: {output_path}", file=sys.stderr)
+            sys.exit(1)
+
     print("Предлагаемый порядок объединения:")
     for pos, idx in enumerate(order):
         print(f"  {pos+1}. {Path(files[idx]).name}")
@@ -317,7 +356,7 @@ def main():
             sys.exit(0)
 
     sorted_files = [files[i] for i in order]
-    merge_pdfs(sorted_files, args.output)
+    merge_pdfs(sorted_files, str(output_path))
 
     entry = {
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
@@ -327,6 +366,7 @@ def main():
     patterns.append(entry)
     save_patterns(pattern_db_path, patterns)
     print(f"Шаблон сохранён в: {pattern_db_path}")
+    print(f"Результат: {output_path}")
 
 if __name__ == "__main__":
     main()

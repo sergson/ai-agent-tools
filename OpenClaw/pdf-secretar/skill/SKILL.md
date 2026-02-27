@@ -82,9 +82,11 @@ python3 scripts/make_searchable.py scanned.pdf --output searchable.pdf --lang ru
 ```bash
 python3 scripts/smart_merge.py "docs/*.pdf" --output merged.pdf
 # First run: asks OpenRouter model for order (requires OPENROUTER_API_KEY). After confirmation saves template.
+# Templates stored by default at /media/temp/.smart_merge/patterns.json (customizable via --pattern-db).
 # Use explicit order: --order "договор,техническое_задание,календарный_план,смета,акт,заявление"
 # Skip confirmation: --no-confirm
 # Disable patterns: --use-patterns false
+# Note: Input files and output must reside under /media/temp (security restriction).
 ```
 
 ## What This Skill Does
@@ -138,6 +140,10 @@ sudo apt-get install poppler-utils tesseract-ocr ghostscript
 - `add_watermark.py` для градиентов/изображений требует `reportlab`.
 - Все скрипты принимают `--output` для указания выходного файла; по умолчанию `output.pdf` в текущей директории.
 - `make_searchable.py` использует `ocrmypdf` для создания текстового слоя. Убедитесь, что ghostscript установлен в системе.
+- `smart_merge.py`:
+  - Шаблоны хранятся в `/media/temp/.smart_merge/patterns.json` (можно изменить через `--pattern-db`).
+  - Входные файлы и выходной путь должны находиться внутри `/media/temp` (безопасность).
+  - Для LLM-запроса используется OpenRouter; модель может быть изменена в коде (по умолчанию `arcee-ai/trinity-large-preview:free`).
 
 ## Troubleshooting
 
