@@ -27,7 +27,7 @@ def ensure_dependencies():
 # Constants
 DEFAULT_PATTERN_DB = Path("/media/temp/.smart_merge/patterns.json")
 MIN_SIMILARITY_DEFAULT = 0.6
-OPENROUTER_MODEL = "arcee-ai/trinity-large-preview:free"
+OPENROUTER_MODEL = "openrouter/free"
 ALLOWED_BASE_DIR = Path("/media/temp").resolve()
 
 # Stopwords (partial)

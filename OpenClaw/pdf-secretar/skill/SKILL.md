@@ -7,148 +7,178 @@ description: "Advanced PDF manipulation: split by page ranges or list, merge in 
 
 Comprehensive toolkit for advanced PDF operations. Handles splitting, merging, sorting, deleting, editing, coherence checking, OCR, image extraction, watermarking, rotation, metadata extraction, and creating searchable PDFs.
 
+## Simplified Launch (for Agents)
+
+Instead of calling individual scripts with full paths, you can use a single command:
+
+```bash
+pdf-secretar <command> [arguments...]
+```
+
+Examples:
+pdf-secretar merge_pages --input "*.pdf" --output result.pdf
+pdf-secretar smart_merge --files "/media/temp/*.pdf" --no-confirm
+pdf-secretar split_pages --input doc.pdf --pages 1-3,5
+
+## Installation
+
+The skill is packaged in `pdf-secretar.skill` and installed in `~/.openclaw/skills/` by unpacking.
+After installing the skill, the launcher script is located at: ~/.openclaw/skills/pdf-secretar/bin/pdf-secretar
+To use it from any directory, create a symbolic link in `~/.local/bin/` (make sure this directory exists and is in your `PATH`):
+```bash
+mkdir -p ~/.local/bin
+ln -s ~/.openclaw/skills/pdf-secretar/bin/pdf-secretar ~/.local/bin/
+```
+If ~/.local/bin is not yet in your PATH, add the following line to your ~/.bashrc or ~/.profile: export PATH="$HOME/.local/bin:$PATH"
+Then reload the configuration: source ~/.bashrc
+Now you can run pdf-secretar from anywhere. To verify, type: pdf-secretar
+You should see a list of available commands.
+
+The command automatically uses Python from the virtual environment, so manual activation is not required.
+
+The list of available commands matches the script names (without the .py extension).
+
+
 ## Quick Start
 
 ### Split PDF by ranges
 ```bash
-python3 scripts/split_pages.py input.pdf --ranges 1-3,5,7-9 --output-dir pages/
+pdf-secretar split_pages input.pdf --ranges 1-3,5,7-9 --output-dir pages/
 ```
 
 ### Merge PDFs by name order
 ```bash
-python3 scripts/merge_pages.py "pages/*.pdf" --order name --output merged.pdf
+pdf-secretar  merge_pages "pages/*.pdf" --order name --output merged.pdf
 ```
 
 ### Merge PDFs by content patterns
 ```bash
-python3 scripts/merge_content.py "docs/*.pdf" --patterns "договор,акт,счёт" --output merged.pdf
+pdf-secretar  merge_content "docs/*.pdf" --patterns "договор,акт,счёт" --output merged.pdf
 ```
 
 ### Delete pages
 ```bash
-python3 scripts/delete_pages.py input.pdf --pages 2,4,6-9 --output cleaned.pdf
+pdf-secretar  delete_pages input.pdf --pages 2,4,6-9 --output cleaned.pdf
 ```
 
 ### Move pages (reorder)
 ```bash
-python3 scripts/sort_pages.py input.pdf --move 5:2,8:6 --output reordered.pdf
+pdf-secretar sort_pages input.pdf --move 5:2,8:6 --output reordered.pdf
 ```
 
 ### Edit page text via nano-pdf
 ```bash
-python3 scripts/edit_page_text.py input.pdf --page 3 --instruction "Fix typo: 'teh' -> 'the'" --output edited.pdf
+pdf-secretar edit_page_text input.pdf --page 3 --instruction "Fix typo: 'teh' -> 'the'" --output edited.pdf
 ```
 
 ### Check coherence between pages
 ```bash
-python3 scripts/check_coherence.py input.pdf --threshold 0.3
+pdf-secretar check_coherence input.pdf --threshold 0.3
 ```
 
 ### Extract text (with optional OCR)
 ```bash
-python3 scripts/ocr_pages.py input.pdf --pages 1-3 --text-output text.txt
+pdf-secretar ocr_pages input.pdf --pages 1-3 --text-output text.txt
 # For scanned PDFs add --ocr (requires tesseract, pdf2image)
 ```
 
 ### Extract pages as images
 ```bash
-python3 scripts/extract_images.py input.pdf --output-dir images/ --format png --dpi 200 --pages 1-5
+pdf-secretar  extract_images input.pdf --output-dir images/ --format png --dpi 200 --pages 1-5
 ```
 
 ### Add watermark (text or image)
 ```bash
-python3 scripts/add_watermark.py input.pdf --text "CONFIDENTIAL" --color "#FF0000" --opacity 0.4 --angle 30 --output watermarked.pdf
+pdf-secretar add_watermark input.pdf --text "CONFIDENTIAL" --color "#FF0000" --opacity 0.4 --angle 30 --output watermarked.pdf
 # Or with image:
-python3 scripts/add_watermark.py input.pdf --image watermark.png --output watermarked.pdf
+pdf-secretar add_watermark input.pdf --image watermark.png --output watermarked.pdf
 ```
 
 ### Rotate pages
 ```bash
-python3 scripts/rotate_pages.py input.pdf --degrees 90 --pages 1-3 --output rotated.pdf
+pdf-secretar  rotate_pages input.pdf --degrees 90 --pages 1-3 --output rotated.pdf
 # Rotate all pages if --pages omitted
 ```
 
 ### Extract metadata
 ```bash
-python3 scripts/extract_metadata.py input.pdf --output meta.json
+pdf-secretar  extract_metadata input.pdf --output meta.json
 ```
 
 ### Make PDF searchable (OCR text layer)
 ```bash
-python3 scripts/make_searchable.py scanned.pdf --output searchable.pdf --lang rus+eng --deskew --clean
+pdf-secretar  make_searchable scanned.pdf --output searchable.pdf --lang rus+eng --deskew --clean
 ```
 
 ### Intelligent merge (content-based ordering)
 ```bash
-python3 scripts/smart_merge.py "docs/*.pdf" --output merged.pdf
+pdf-secretar smart_merge "docs/*.pdf" --output merged.pdf
 # First run: asks OpenRouter model for order (requires OPENROUTER_API_KEY). After confirmation saves template.
 # Templates stored by default at /media/temp/.smart_merge/patterns.json (customizable via --pattern-db).
-# Use explicit order: --order "договор,техническое_задание,календарный_план,смета,акт,заявление"
+# Use explicit order: --order "contract, technical specifications, schedule, estimate, act, application"
 # Skip confirmation: --no-confirm
 # Disable patterns: --use-patterns false
 # Note: Input files and output must reside under /media/temp (security restriction).
 ```
 
+
 ## What This Skill Does
 
 | Function | Script | Description |
-|----------|--------|-------------|
-| Разбивка | `split_pages.py` | Разбивает PDF по диапазонам или списку страниц |
-| Объединение (имя/дата/список) | `merge_pages.py` | Объединяет PDF по порядку имени, даты создания или из списка |
-| Объединение (по содержимому) | `merge_content.py` | Сортирует файлы по поиску шаблонов в тексте, затем объединяет |
-| Удаление страниц | `delete_pages.py` | Удаляет указанные страницы |
-| Перестановка | `sort_pages.py` | Перемещает страницы (FROM:TO) внутри документа |
-| Правка текста | `edit_page_text.py` | Правка текста на конкретной странице через nano-pdf |
-| Проверка связности | `check_coherence.py` | Анализирует перекрытие предложений между соседними страницами |
-| OCR / извлечение текста | `ocr_pages.py` | Извлекает текст (PyPDF2 или через OCR) в .txt |
-| Изображения | `extract_images.py` | Конвертирует страницы в PNG/JPEG с заданным DPI |
-| Водяной знак | `add_watermark.py` | Накладывает текстовый или графический водяной знак |
-| Поворот | `rotate_pages.py` | Поворачивает страницы на 90/180/270 градусов |
-| Метаданные | `extract_metadata.py` | Извлекает метаданные PDF (title, author, dates, etc.) |
-| Поисковый PDF (Searchable) | `make_searchable.py` | Добавляет текстовый слой OCR к сканированному PDF (требует ghostscript, tesseract, poppler) |
-| Интеллектуальное объединение | `smart_merge.py` | Объединяет PDF в логическом порядке на основе сигнатур содержимого, с обучением шаблонов и подтверждением. Может использовать OpenRouter для определения порядка при первом запуске. |
+|----------|-------------|
+| Split | `split_pages.py` | Splits a PDF by page range or list |
+| Merge (name/date/list) | `merge_pages.py` | Merge PDFs by name, creation date, or list |
+| Merge (content) | `merge_content.py` | Sorts files by finding patterns in the text, then merges |
+| Delete Pages | `delete_pages.py` | Deletes specified pages |
+| Rearrange | `sort_pages.py` | Moves pages (FROM:TO) within the document |
+| Edit Text | `edit_page_text.py` | Edit text on a specific page with nano-pdf |
+| Coherence check | `check_coherence.py` | Analyzes sentence overlap between adjacent pages |
+| OCR / Text Extraction | `ocr_pages.py` | Extracts text (PyPDF2 or via OCR) to .txt |
+| Images | `extract_images.py` | Converts pages to PNG/JPEG with a specified DPI |
+| Watermark | `add_watermark.py` | Adds a text or image watermark |
+| Rotate | `rotate_pages.py` | Rotates pages 90/180/270 degrees |
+| Metadata | `extract_metadata.py` | Extracts PDF metadata (title, author, dates, etc.) |
+| Searchable PDF | `make_searchable.py` | Adds an OCR text layer to a scanned PDF (requires ghostscript, tesseract, poppler) |
+| Smart Merging | `smart_merge.py` | Merges PDFs in a logical order based on content signatures, with template learning and validation. Can use OpenRouter to determine order on first run. |
 
 ## Requirements
 
-### Core (обязательно)
+### Core (required)
 - Python 3.8+
 - PyPDF2: `uv pip install PyPDF2`
 
 ### Optional dependencies
-- **OCR (скан документы)**: `uv pip install pytesseract pdf2image pillow`
-  + System: `tesseract-ocr`, `poppler-utils`
-- **Watermark (текстовый)**: `uv pip install reportlab`
-- **Image extraction**: `uv pip install pdf2image pillow`
-  + System: `poppler-utils` (для `pdftoppm`)
-- **Make searchable PDF**: `uv pip install ocrmypdf`
-  + System: `ghostscript`, `tesseract-ocr`, `poppler-utils`
+- **OCR (scanned documents)**: `uv pip install pytesseract pdf2image pillow` 
++ System: `tesseract-ocr`, `poppler-utils`
+- **Watermark (text)**: `uv pip install reportlab`
+- **Image extraction**: `uv pip install pdf2image pillow` 
++ System: `poppler-utils` (for `pdftoppm`)
+- **Make searchable PDF**: `uv pip install ocrmypdf` 
++ System: `ghostscript`, `tesseract-ocr`, `poppler-utils`
 
 ### System packages (Ubuntu/Debian)
 ```bash
 sudo apt-get install poppler-utils tesseract-ocr ghostscript
 ```
 
-## Installation
-
-Скилл упаковывается в `pdf-secretar.skill` и устанавливается в `~/.npm-global/lib/node_modules/openclaw/skills/` распаковкой.
 
 ## Notes
 
-- Номера страниц: 1-индексация (первая страница = 1), кроме `nano-pdf` (где 0-индексация)
-- В `merge_content.py` шаблоны ищутся case-insensitively. Файлы, где найден более ранний шаблон, идут первыми.
-- `check_coherence.py` использует простой графемный анализ; порог 0.0-1.0 (ниже = подозрительный разрыв).
-- `add_watermark.py` для градиентов/изображений требует `reportlab`.
-- Все скрипты принимают `--output` для указания выходного файла; по умолчанию `output.pdf` в текущей директории.
-- `make_searchable.py` использует `ocrmypdf` для создания текстового слоя. Убедитесь, что ghostscript установлен в системе.
+- Page numbers: 1-indexed (first page = 1), except for `nano-pdf` (where 0-indexed)
+- In `merge_content.py`, patterns are searched case-insensitively. Files that contain an earlier pattern are listed first.
+- `check_coherence.py` uses simple grapheme analysis; the threshold is 0.0-1.0 (lower = suspicious discontinuity).
+- `add_watermark.py` requires `reportlab` for gradients/images.
+- All scripts accept `--output` to specify the output file; by default, `output.pdf` in the current directory.
+- `make_searchable.py` uses `ocrmypdf` to create the text layer. Make sure ghostscript is installed on your system.
 - `smart_merge.py`:
-  - Шаблоны хранятся в `/media/temp/.smart_merge/patterns.json` (можно изменить через `--pattern-db`).
-  - Входные файлы и выходной путь должны находиться внутри `/media/temp` (безопасность).
-  - Для LLM-запроса используется OpenRouter; модель может быть изменена в коде (по умолчанию `arcee-ai/trinity-large-preview:free`).
+- Patterns are stored in `/media/temp/.smart_merge/patterns.json` (can be changed via `--pattern-db`).
+- Input files and output path must be located in `/media/temp` (security).
+- OpenRouter is used for LLM query; the model can be changed in code (default is `arcee-ai/trinity-large-preview:free`).
 
 ## Troubleshooting
 
-- **ModuleNotFoundError**: убедитесь, что PyPDF2 установлен в workspace `.venv`.
-- **nano-pdf not found**: установите скилл `nano-pdf`.
-- **OCR errors**: проверьте `tesseract` и `pdftoppm` в системе.
-- **Watermark type error**: преобразование Decimal → float исправлено; используйте последнюю версию скрипта.
-- **make_searchable missing ghostscript**: установите `sudo apt-get install ghostscript`.
+- **ModuleNotFoundError**: Make sure PyPDF2 is installed in the `.venv` workspace.
+- **nano-pdf not found**: Install the `nano-pdf` skill. 
+- **OCR errors**: Check `tesseract` and `pdftoppm` on the system.
+- **Watermark type error**: Decimal to float conversion fixed; use the latest version of the script.
+- **make_searchable missing ghostscript**: Install `sudo apt-get install ghostscript`.
